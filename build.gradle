@@ -1,0 +1,46 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version '3.28.2'
+    id 'co.uzzu.dotenv.gradle' version '4.0.0'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+    implementation platform('io.quarkiverse.amazonservices:quarkus-amazon-services-bom:3.9.1')
+    implementation platform('software.amazon.awssdk:bom:2.29.41')
+    implementation 'io.quarkus:quarkus-mongodb-panache'
+    implementation 'io.quarkus:quarkus-scheduler'
+    implementation 'io.quarkus:quarkus-arc'
+    implementation 'io.quarkus:quarkus-rest'
+    implementation 'io.quarkus:quarkus-opentelemetry'
+    implementation 'io.quarkus:quarkus-smallrye-health'
+    implementation 'io.quarkiverse.amazonservices:quarkus-amazon-s3'
+    implementation 'software.amazon.awssdk:url-connection-client'
+    implementation 'io.micrometer:micrometer-observation:1.12.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2'
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+    testImplementation 'io.quarkus:quarkus-junit5'
+}
+
+group = 'com.remotefalcon'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+test {
+    systemProperty "java.util.logging.manager", "org.jboss.logmanager.LogManager"
+}
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}
