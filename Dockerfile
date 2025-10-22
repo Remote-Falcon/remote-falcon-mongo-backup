@@ -1,6 +1,7 @@
 FROM container-registry.oracle.com/graalvm/native-image:21 AS build
 WORKDIR /app
 COPY . .
+RUN sed -i 's/\r$//' ./gradlew
 RUN chmod +x ./gradlew
 
 ARG MONGO_URI
