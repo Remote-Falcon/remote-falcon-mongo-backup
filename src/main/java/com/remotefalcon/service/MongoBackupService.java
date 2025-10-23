@@ -41,7 +41,7 @@ public class MongoBackupService {
 
     String tempDirectory = "/tmp/mongo-backups";
 
-    @Scheduled(every = "24h")
+    @Scheduled(cron = "0 0 12 * * ?", timeZone = "America/Chicago")
     public void runArchiveProcess() {
         log.info("Running MongoDB backup process");
 
