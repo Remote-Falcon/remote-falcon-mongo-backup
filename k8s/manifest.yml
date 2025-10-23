@@ -109,7 +109,7 @@ spec:
       http:
         paths:
           - pathType: Prefix
-            path: /remote-falcon-viewer
+            path: /remote-falcon-mongo-backup
             backend:
               service:
                 name: #{Application}#
