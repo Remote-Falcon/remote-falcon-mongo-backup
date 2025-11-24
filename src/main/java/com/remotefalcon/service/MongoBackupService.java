@@ -9,7 +9,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.zip.GZIPInputStream;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.bson.Document;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -24,12 +27,20 @@ import lombok.extern.jbosslog.JBossLog;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 @JBossLog
 @ApplicationScoped
 public class MongoBackupService {
+    private static final DateTimeFormatter BACKUP_FILENAME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final Pattern BACKUP_KEY_PATTERN = Pattern.compile("^mongo-backups/mongo-backup-(\\d{8}-\\d{6})\\.gz$");
+    private static final int BACKUP_RETENTION_DAYS = 21;
+    private static final String BACKUP_PREFIX = "mongo-backups/";
+
     @Inject
     MongoClient mongoClient;
 
@@ -49,6 +60,7 @@ public class MongoBackupService {
             // Create backup and upload to S3
             File backupFile = createMongoBackup();
             uploadToS3(backupFile);
+            deleteOldBackups();
 
             log.info("MongoDB backup completed successfully");
         } catch (Exception e) {
@@ -64,7 +76,7 @@ public class MongoBackupService {
         }
 
         // Generate timestamped backup filename
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        String timestamp = LocalDateTime.now().format(BACKUP_FILENAME_FORMATTER);
         String backupFileName = String.format("mongo-backup-%s.gz", timestamp);
         Path backupPath = tempPath.resolve(backupFileName);
 
@@ -106,7 +118,7 @@ public class MongoBackupService {
     }
 
     private void uploadToS3(File backupFile) throws IOException {
-        String s3Key = "mongo-backups/" + backupFile.getName();
+        String s3Key = BACKUP_PREFIX + backupFile.getName();
 
         log.infof("Uploading backup to S3: s3://%s/%s", s3BucketName, s3Key);
 
@@ -147,7 +159,7 @@ public class MongoBackupService {
     public void restoreFromBackup(String backupFileName) throws IOException {
         log.infof("Starting restore from backup: %s", backupFileName);
 
-        String s3Key = "mongo-backups/" + backupFileName;
+        String s3Key = BACKUP_PREFIX + backupFileName;
 
         // Download backup from S3
         Path tempPath = Paths.get(tempDirectory);
@@ -207,5 +219,58 @@ public class MongoBackupService {
         }
 
         log.infof("Restore completed: %d documents restored", totalDocuments);
+    }
+
+    private void deleteOldBackups() {
+        log.infof("Checking for backups older than %d days to delete", BACKUP_RETENTION_DAYS);
+
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(BACKUP_RETENTION_DAYS);
+        String continuationToken = null;
+        int deletedCount = 0;
+
+        do {
+            ListObjectsV2Request.Builder listRequestBuilder = ListObjectsV2Request.builder()
+                .bucket(s3BucketName)
+                .prefix(BACKUP_PREFIX);
+
+            if (continuationToken != null) {
+                listRequestBuilder.continuationToken(continuationToken);
+            }
+
+            ListObjectsV2Response response = s3Client.listObjectsV2(listRequestBuilder.build());
+
+            for (var s3Object : response.contents()) {
+                String key = s3Object.key();
+                Matcher matcher = BACKUP_KEY_PATTERN.matcher(key);
+                if (!matcher.matches()) {
+                    continue;
+                }
+
+                String timestampPart = matcher.group(1);
+                try {
+                    LocalDateTime backupTime = LocalDateTime.parse(timestampPart, BACKUP_FILENAME_FORMATTER);
+                    if (!backupTime.isAfter(cutoff)) {
+                        deleteBackupObject(key);
+                        deletedCount++;
+                        log.infof("Deleted old backup: %s", key);
+                    }
+                } catch (DateTimeParseException e) {
+                    log.warnf("Skipping backup with unparseable timestamp '%s': %s", key, e.getMessage());
+                }
+            }
+
+            continuationToken = response.isTruncated() ? response.nextContinuationToken() : null;
+        } while (continuationToken != null);
+
+        log.infof("Old backup cleanup completed; deleted %d file(s)", deletedCount);
+    }
+
+    private void deleteBackupObject(String key) {
+        DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
+            .bucket(s3BucketName)
+            .key(key)
+            .build();
+
+        s3Client.deleteObject(deleteRequest);
     }
 }
