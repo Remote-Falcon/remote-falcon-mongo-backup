@@ -71,7 +71,7 @@ jobs:
           Image: ${{ env.REGISTRY }}/${{ steps.repository_string.outputs.lowercase }}:${{ github.sha }}
           Requests.Memory: 128Mi
           Requests.CPU: 25m
-          Limits.Memory: 256Mi
+          Limits.Memory: 750Mi
           Limits.CPU: 200m
           Host: remotefalcon.com
 
