@@ -52,7 +52,7 @@ public class MongoBackupService {
 
     String tempDirectory = "/tmp/mongo-backups";
 
-    @Scheduled(cron = "0 0 12 * * ?", timeZone = "America/Chicago")
+    @Scheduled(cron = "{backup.cron}", timeZone = "{backup.timezone}")
     public void runArchiveProcess() {
         log.info("Running MongoDB backup process");
 
