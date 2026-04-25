@@ -64,6 +64,8 @@ spec:
                 secretKeyRef:
                   name: mongo-backup-auth-token
                   key: BACKUP_AUTH_TOKEN
+            - name: BACKUP_S3_BUCKET
+              value: rf-mongo-backup
           startupProbe:
             httpGet:
               path: /remote-falcon-mongo-backup/q/health
